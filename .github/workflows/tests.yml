@@ -64,11 +64,16 @@ jobs:
           ruby-version: ${{ env.RUBY_VERSION }}
           bundler-cache: true
 
-      - uses: actions/setup-node@master
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - uses: actions/cache@v3
+      - name: Install ImageMagick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick libmagickwand-dev
+
+      - uses: actions/cache@v4
         id: app-cache
         with:
           path: ./spec/decidim_dummy_app/
@@ -92,7 +97,7 @@ jobs:
 
       - run: tar -zcf /tmp/testapp-env.tar.gz ./spec/decidim_dummy_app
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: workspace
           path: /tmp/testapp-env.tar.gz
@@ -139,11 +144,19 @@ jobs:
           ruby-version: ${{ env.RUBY_VERSION }}
           bundler-cache: true
 
-      - uses: actions/download-artifact@v3
+      # AÑADIDO: Instalar ImageMagick también en el job de tests
+      - name: Install ImageMagick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick libmagickwand-dev
+          which convert
+          convert -version
+
+      - uses: actions/download-artifact@v4
         with:
           name: workspace
           path: /tmp
-      
+
       - run: tar -zxf /tmp/testapp-env.tar.gz
         name: Restore application
 
@@ -163,10 +176,10 @@ jobs:
           FEATURES: ${{ matrix.features }}
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: screenshots
+          name: screenshots-${{ strategy.job-index }}-${{ matrix.features }}-${{ github.run_id }}
           path: ./spec/decidim_dummy_app/tmp/screenshots

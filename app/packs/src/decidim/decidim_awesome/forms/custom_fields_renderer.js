@@ -1,5 +1,6 @@
 import "formBuilder/dist/form-render.min.js";
 import "src/decidim/decidim_awesome/forms/rich_text_plugin"
+import { CustomFieldsHelpers } from "src/decidim/decidim_awesome/forms/custom_fields_helpers"
 
 export default class CustomFieldsRenderer { // eslint-disable-line no-unused-vars
   constructor() {
@@ -8,7 +9,6 @@ export default class CustomFieldsRenderer { // eslint-disable-line no-unused-var
 
   getLang(lang) {
     const langs = {
-      // ar: 'ar-SA', // Not in decidim yet
       "ar": "ar-TN",
       "ca": "ca-ES",
       "cs": "cs-CZ",
@@ -49,10 +49,6 @@ export default class CustomFieldsRenderer { // eslint-disable-line no-unused-var
     return "en-US";
   }
 
-  /*
-  * Creates an XML document with a subset of html-compatible dl/dd/dt elements
-  * to store the custom fields answers
-  */
   dataToXML(data) {
     const $dl = $("<dl/>");
     let $dd = null,
@@ -67,8 +63,6 @@ export default class CustomFieldsRenderer { // eslint-disable-line no-unused-var
     $dl.attr("data-generator", "decidim_awesome");
     $dl.attr("data-version", window.DecidimAwesome.version);
     for (key in data) { // eslint-disable-line guard-for-in
-      // console.log("get the data!", key, data[key]);
-      // Richtext plugin does not saves userdata, so we get it from the hidden input
       if (data[key].type === "textarea" && data[key].subtype === "richtext") {
         data[key].userData = [$(`#${data[key].name}-input`).val()];
       }
@@ -77,7 +71,6 @@ export default class CustomFieldsRenderer { // eslint-disable-line no-unused-var
         $dt.text(data[key].label);
         $dt.attr("name", data[key].name);
         $dd = $("<dd/>");
-        // console.log("data for", key, data[key].name, data[key])
         for (val in data[key].userData) { // eslint-disable-line guard-for-in
           $div = $("<div/>");
           label = data[key].userData[val];
@@ -95,7 +88,6 @@ export default class CustomFieldsRenderer { // eslint-disable-line no-unused-var
               label = datum;
             }
           }
-          // console.log("userData", text, "label", label, 'key', key, 'data', data)
           if (data[key].type === "textarea" && data[key].subtype === "richtext") {
             $div.html(label);
           } else {
@@ -112,7 +104,6 @@ export default class CustomFieldsRenderer { // eslint-disable-line no-unused-var
         $dl.append($dd);
       }
     }
-    // console.log("dataToXML", $dl[0].outerHTML);
     return `<xml>${$dl[0].outerHTML}</xml>`;
   }
 
@@ -120,53 +111,83 @@ export default class CustomFieldsRenderer { // eslint-disable-line no-unused-var
     if (!this.$element) {
       return false;
     }
+    this.fixCheckboxGroups();
+    this.fixRadioButtons();
+    return this;
+  }
 
-    /**
-    * Hack to fix required checkboxes being reset
-    * Issue: https://github.com/decidim-ice/decidim-module-decidim_awesome/issues/82
-    */
+  fixCheckboxGroups() {
     this.$element.find(".formbuilder-checkbox-group").each((_key, group) => {
       const inputs = $(".formbuilder-checkbox input", group);
       const $label = $(group).find("label");
       const data = this.spec.find((obj) => obj.type === "checkbox-group" && obj.name === $label.attr("for"));
-      let values = data.userData;
+      const values = data?.userData;
       if (!inputs.length || !data || !values) {
         return;
       }
-
-      inputs.each((_idx, input) => {
-        let index = values.indexOf(input.value);
-        if (index >= 0) {
-          values.splice(index, 1)
-          // setting checked=true do not makes the browser aware that the form is valid if the field is required
-          if (!input.checked)
-          {$(input).click();}
-        } else if (input.checked)
-        {$(input).click();}
-      });
-
-      // Fill "other" option
-      const otherOption = $(".other-option", inputs.parent())[0];
-      const otherVal = $(".other-val", inputs.parent())[0];
-      const otherText = values.join(" ");
-
-      if (otherOption) {
-        if (otherText) {
-          otherOption.checked = true;
-          otherOption.value = otherText;
-          otherVal.value = otherText;
-        } else {
-          otherOption.checked = false;
-          otherOption.value = "";
-          otherVal.value = "";
-        }
-      }
+      this.processCheckboxInputs(inputs, values);
+      this.handleOtherOption(inputs, values);
     });
+  }
 
-    /**
-    * Hack to fix required radio buttons "other" value
-    * Issue: https://github.com/decidim-ice/decidim-module-decidim_awesome/issues/133
-    */
+  processCheckboxInputs(inputs, values) {
+    inputs.each((_idx, input) => {
+      const $input = $(input);
+      let shouldCheck = false;
+      let index = values.indexOf(input.value);
+      if (index >= 0) {
+        shouldCheck = true;
+        values.splice(index, 1);
+      } else {
+        shouldCheck = this.checkByLabelMatch($input, values);
+      }
+      this.applyCheckboxState(input, shouldCheck);
+    });
+  }
+
+  checkByLabelMatch($input, values) {
+    const labelText = $input.closest("label").text().trim() ||
+      $input.siblings("label").text().trim() || $input.parent().text().trim();
+    if (labelText) {
+      const matchIndex = values.findIndex((value) =>
+        value === labelText || labelText.includes(value) || value.includes(labelText)
+      );
+      if (matchIndex >= 0) {
+        values.splice(matchIndex, 1);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  applyCheckboxState(input, shouldCheck) {
+    if (shouldCheck) {
+      if (!input.checked) {
+        $(input).click();
+      }
+    } else if (input.checked) {
+      $(input).click();
+    }
+  }
+
+  handleOtherOption(inputs, values) {
+    const otherOption = $(".other-option", inputs.parent())[0];
+    const otherVal = $(".other-val", inputs.parent())[0];
+    const otherText = values.join(" ");
+    if (otherOption) {
+      if (otherText) {
+        otherOption.checked = true;
+        otherOption.value = otherText;
+        otherVal.value = otherText;
+      } else {
+        otherOption.checked = false;
+        otherOption.value = "";
+        otherVal.value = "";
+      }
+    }
+  }
+
+  fixRadioButtons() {
     this.$element.find(".formbuilder-radio input.other-val").on("input", (input) => {
       const $input = $(input.currentTarget);
       const $group = $input.closest(".formbuilder-radio-group");
@@ -177,10 +198,8 @@ export default class CustomFieldsRenderer { // eslint-disable-line no-unused-var
         }
       });
     });
-    return this;
   }
 
-  // Saves xml to the hidden input
   storeData() {
     if (!this.$element) {
       return false;
@@ -189,18 +208,42 @@ export default class CustomFieldsRenderer { // eslint-disable-line no-unused-var
     const $body = $form.find(`input[name="${this.$element.data("name")}"]`);
     if ($body.length && this.instance) {
       this.spec = this.instance.userData;
+      this.fixUserDataValues();
       $body.val(this.dataToXML(this.spec));
       this.$element.data("spec", this.spec);
     }
-    // console.log("storeData spec", this.spec, "$body", $body,"$form",$form,"this",this);
     return this;
+  }
+
+  fixUserDataValues() {
+    if (!this.spec || !this.$element) {
+      return;
+    }
+    this.spec.forEach((field) => {
+      if (!field.userData || field.userData.length === 0) {
+        return;
+      }
+      const hasOnValues = field.userData.some((value) => value === "on");
+      if (!hasOnValues) {
+        return;
+      }
+      if (field.type === "checkbox-group") {
+        CustomFieldsHelpers.fixCheckboxValues(this, field);
+      } else if (field.type === "radio-group") {
+        CustomFieldsHelpers.fixRadioValues(this, field);
+      } else if (field.type === "select") {
+        CustomFieldsHelpers.fixSelectValues(this, field);
+      }
+    });
+  }
+
+  extractLabelValue($checkbox, field, index) {
+    return CustomFieldsHelpers.extractLabelValue($checkbox, field, index);
   }
 
   init($element) {
     this.$element = $element;
     this.spec = $element.data("spec");
-    // console.log("init", $element, "this", this)
-    // in case of multilang tabs we only render one form due a limitation in the library for handling several instances
     this.instance = $element.formRender({
       i18n: {
         locale: this.lang,
