@@ -21,10 +21,10 @@ describe "Admin manages verification tweaks" do
     check "Allow access if any of the authorizations is granted (by default, all are required)"
 
     fill_in_i18n_editor(:config_force_authorization_help_text,
-                    "#config-force_authorization_help_text-tabs",
-                    en: "<p>Help text <strong>with HTML</strong></p>",
-                    ca: "<p>Text d'ajuda <strong>amb HTML</strong></p>",
-                    es: "<p>Texto de ayuda <strong>con HTML</strong></p>")
+                        "#config-force_authorization_help_text-tabs",
+                        en: "<p>Help text <strong>with HTML</strong></p>",
+                        ca: "<p>Text d'ajuda <strong>amb HTML</strong></p>",
+                        es: "<p>Texto de ayuda <strong>con HTML</strong></p>")
     click_button "Update configuration"
 
     expect(page).to have_content("updated successfully")
